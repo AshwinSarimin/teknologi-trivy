@@ -1,0 +1,30 @@
+parameters:
+- name: dependsOn
+  type: object
+  default: []
+
+- name: apps 
+  type: object
+
+- name: tag
+
+variables:
+- template: vars/vars.yaml
+
+stages:
+- stage: Build
+  dependsOn: ${{ parameters.dependsOn }}
+  jobs:
+  - ${{ each app in parameters.apps }}:
+    - job: build_${{ replace(app, '-', '_') }}
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+      - checkout: self
+      - template: steps/trivy-containerscan.yaml
+        parameters:
+          tag: "${{ parameters.tag }}"
+          buildName: "${{ app }}"
+          dockerRegistryBasePath: "$(dockerRegistryBasePath)"
+          
+          

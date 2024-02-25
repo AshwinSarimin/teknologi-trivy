@@ -1,0 +1,24 @@
+parameters:
+  - name: tag
+  - name: buildName
+  - name: dockerRegistryBasePath
+
+steps:
+  - task: Bash@3
+    displayName: 'Get latest Trivy version'
+    inputs:
+      targetType: inline
+      script: |
+        latest_release=$(curl -sL "https://api.github.com/repos/aquasecurity/trivy/releases/latest")
+        trivyVersion=$(echo "$latest_release" | jq -r '.name')
+        echo "$trivyVersion"
+        echo "##vso[task.setvariable variable=trivyVersion]$trivyVersion"
+  - task: trivy@1
+    displayName: 🔍 Scan Image (Trivy)
+    inputs:
+      docker: false
+      image: '${{ parameters.dockerRegistryBasePath }}/${{ parameters.buildName }}:${{ parameters.tag }}'
+      version: "$(trivyVersion)"
+      debug: true
+      ignoreUnfixed: true
+      exitCode: 1

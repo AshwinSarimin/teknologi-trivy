@@ -1,0 +1,2 @@
+variables:
+  dockerRegistryBasePath: registryname.azurecr.io

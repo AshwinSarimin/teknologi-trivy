@@ -1,0 +1,54 @@
+parameters:
+  - name: repositoryNames
+    type: object
+    default: []
+  
+stages:
+  - stage: Repositories_securityscan
+    dependsOn: []
+    jobs:
+      - ${{ each repo in parameters.repositoryNames }}:
+        - job: Securityscan_${{ replace(repo, '-', '_') }}
+          pool:
+            vmImage: ubuntu-latest
+          steps:
+            - task: Bash@3
+              displayName: 'Download and install Trivy'
+              inputs:
+                targetType: inline
+                script: |
+                  latest_release=$(curl -sL "https://api.github.com/repos/aquasecurity/trivy/releases/latest")
+                  trivyVersion=$(echo "$latest_release" | jq -r '.name')
+                  trivyVersion=${trivyVersion#?}
+                  wget https://github.com/aquasecurity/trivy/releases/download/v${trivyVersion}/trivy_${trivyVersion}_Linux-64bit.deb
+                  sudo dpkg -i trivy_${trivyVersion}_Linux-64bit.deb
+                  trivy -v
+            - checkout: ${{ repo }}
+              displayName: Checkout ${{ repo }}
+              persistCredentials: true
+            - task: Bash@3
+              displayName: 'Scan local repository ${{ repo }}'
+              inputs:
+                targetType: inline
+                script: |
+                  cd ${{ repo }}
+                  trivy repo --scanners vuln,secret,config --exit-code 0 --severity LOW,MEDIUM --format template --template '@/usr/local/share/trivy/templates/junit.tpl' -o junit-report-low-medium.xml ./
+                  trivy repo --scanners vuln,secret,config --exit-code 1 --severity HIGH,CRITICAL --format template --template '@/usr/local/share/trivy/templates/junit.tpl' -o junit-report-high-critical.xml ./
+            - task : PublishTestResults@2
+              displayName: Publish test results - Low/Medium - ${{ repo }}
+              inputs: 
+                testResultsFormat: 'JUnit'
+                testResultsFiles: '**/junit-report-low-medium.xml'
+                mergeTestResults: true
+                failTaskOnFailedTests: false
+                testRunTitle: 'Trivy - Low and Medium Vulnerabilities ${{ repo }}'
+              condition: 'always()'
+            - task : PublishTestResults@2
+              displayName: Publish test results - High/Critical - ${{ repo }}
+              inputs: 
+                testResultsFormat: 'JUnit'
+                testResultsFiles: '**/junit-report-high-critical.xml'
+                mergeTestResults: true
+                failTaskOnFailedTests: true
+                testRunTitle: 'Trivy - High and Critical Vulnerabilities - ${{ repo }}'
+              condition: 'always()'
